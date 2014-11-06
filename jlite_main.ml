@@ -12,6 +12,7 @@ open Jlite_toir3
 
 
 let source_files = ref []
+let opt_flag = ref false
 
 let usage_msg = Sys.argv.(1) ^ " <source files>"
 
@@ -30,8 +31,9 @@ let parse_file file_name =
     with
 		End_of_file -> exit 0	  
 
-let process file_name prog  = 
+let process file_name prog opt_flag = 
 	begin
+    printf "Optimization flag: %B\n" opt_flag;
 		print_string (Jlite_structs.string_of_jlite_program prog);
 		let typedprog= (Jlite_annotatedtyping.type_check_jlite_program prog) in
 		print_string (Jlite_structs.string_of_jlite_program typedprog);
@@ -40,13 +42,17 @@ let process file_name prog  =
 	end
 	
 let _ = 
- begin
-	Arg.parse [] set_source_file usage_msg ;
-    match !source_files with
-    | [] -> print_string "No file provided \n"
-    | x::_-> 
-    	let prog = parse_file x in
-    	process x prog
- end
+  begin
+    let speclist = [
+      ("-opt", Arg.Set opt_flag, "Enable compiler optimization mode")
+    ]
+    in
+	  Arg.parse speclist set_source_file usage_msg ;
+      match !source_files with
+      | [] -> print_string "No file provided \n"
+      | x :: _ -> 
+    	  let prog = parse_file x in
+    	  process x prog !opt_flag
+  end
  
  
