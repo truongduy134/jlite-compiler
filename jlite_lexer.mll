@@ -7,7 +7,7 @@
   open Jlite_parser (* Assumes the parser file is "parser.mly". *)
   let incr_linenum file_name lexbuf =
     let pos = lexbuf.Lexing.lex_curr_p in
-      lexbuf.Lexing.lex_curr_p <- 
+      lexbuf.Lexing.lex_curr_p <-
 	{ pos with
 	    Lexing.pos_fname = file_name;
 	    Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
@@ -24,7 +24,7 @@ let newline = ('\n' | '\r' | "\r\n")
 let charprintable = ['\032' - '\126']
 let stringliteral = ([^ '"' '\\' '\n' '\r'] | '\\' (['\\' '"' '\'' 'n' 'r' 't' 'b']
 					|['0'-'9'] ['0'-'9'] ['0'-'9'] |'x' charhex charhex))*
-			
+
 rule token file_name = parse
   | '+'		{ PLUS }
   | '-'		{ MINUS }
@@ -72,18 +72,18 @@ rule token file_name = parse
   | digit+ as num
 		{ INTEGER_LITERAL (int_of_string num) }
   |  "\""( stringliteral
-          as s) 
+          as s)
 	"\"" { STRING_LITERAL s }
   | whitespace { token file_name lexbuf }
   | '\n' { incr_linenum file_name lexbuf; token file_name lexbuf }
   | '\r' { incr_linenum file_name lexbuf; token file_name lexbuf }
   | "\r\n" { incr_linenum file_name lexbuf; token file_name lexbuf }
   | eof		{ EOF }
-  
+
   and multi_comment file_name = parse
   | "*/" 	{ token file_name lexbuf }
   | _ 		{ multi_comment file_name lexbuf}
-  
+
  and single_comment file_name = parse
   | newline { token file_name lexbuf }
-  | _ 		{ single_comment file_name lexbuf}	
+  | _ 		{ single_comment file_name lexbuf}
