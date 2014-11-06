@@ -15,7 +15,7 @@ all: main
 
 main: helper parser lexer
 	cp $(shell pwd)/$(MAIN_NAME).ml $(OUTPUT_DIR)/$(MAIN_NAME).ml
-	$(OCAMLC) -I $(OUTPUT_DIR) -o $(OUTPUT_DIR)/$(MAIN_NAME) $(OUTPUT_DIR)/jlite_structs.cmo $(OUTPUT_DIR)/jlite_annotatedtyping.cmo $(OUTPUT_DIR)/ir3_structs.cmo $(OUTPUT_DIR)/jlite_toir3.cmo $(OUTPUT_DIR)/arm_structs.cmo $(OUTPUT_DIR)/$(PARSER_NAME).cmo $(OUTPUT_DIR)/$(LEXER_NAME).cmo $(OUTPUT_DIR)/$(MAIN_NAME).ml
+	$(OCAMLC) -I $(OUTPUT_DIR) -o $(OUTPUT_DIR)/$(MAIN_NAME) $(OUTPUT_DIR)/jlite_structs.cmo $(OUTPUT_DIR)/jlite_annotatedtyping.cmo $(OUTPUT_DIR)/ir3_structs.cmo $(OUTPUT_DIR)/jlite_toir3.cmo $(OUTPUT_DIR)/arm_structs.cmo $(OUTPUT_DIR)/ir3_toarm.cmo $(OUTPUT_DIR)/$(PARSER_NAME).cmo $(OUTPUT_DIR)/$(LEXER_NAME).cmo $(OUTPUT_DIR)/$(MAIN_NAME).ml
 	cp $(OUTPUT_DIR)/$(MAIN_NAME) $(CUR_DIR)/$(MAIN_NAME)
 
 lexer: parser
@@ -33,11 +33,13 @@ helper:
 	cp $(shell pwd)/arm_structs.ml $(OUTPUT_DIR)/arm_structs.ml
 	cp $(shell pwd)/jlite_annotatedtyping.ml $(OUTPUT_DIR)/jlite_annotatedtyping.ml
 	cp $(shell pwd)/jlite_toir3.ml $(OUTPUT_DIR)/jlite_toir3.ml
+	cp $(shell pwd)/ir3_toarm.ml $(OUTPUT_DIR)/ir3_toarm.ml
 	$(OCAMLC) -I $(OUTPUT_DIR) -c  $(OUTPUT_DIR)/jlite_structs.ml
 	$(OCAMLC) -I $(OUTPUT_DIR) -c $(OUTPUT_DIR)/ir3_structs.ml
 	$(OCAMLC) -I $(OUTPUT_DIR) -c $(OUTPUT_DIR)/arm_structs.ml
 	$(OCAMLC) -I $(OUTPUT_DIR) -c $(OUTPUT_DIR)/jlite_toir3.ml
 	$(OCAMLC) -I $(OUTPUT_DIR) -c $(OUTPUT_DIR)/jlite_annotatedtyping.ml
+	$(OCAMLC) -I $(OUTPUT_DIR) -c $(OUTPUT_DIR)/ir3_toarm.ml
 
 clean:
 	rm -rf $(OUTPUT_DIR)
