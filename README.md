@@ -15,6 +15,15 @@ To clean the project (removing files generated in compilation, including `jlite_
 
     make clean
 
+Instruction on running
+=======================
+Run without optimization:
+
+    ./bin/jlite_main <path to source code>
+
+Run with optimization:
+    ./bin/jlite_main -opt <path to source code>
+
 Optimization part (Cui Wei’s note)
 ===================================
 Call function: optimize_ir3_program located at line 366 of file ir3_optimization.
