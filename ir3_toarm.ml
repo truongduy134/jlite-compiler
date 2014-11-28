@@ -77,6 +77,30 @@ let has_value_in_memory (var : idc3): bool =
     let store_locations = Hashtbl.find var_descriptor var
     in helper store_locations
 
+(* Add binding register to the variable it is holding variable *)
+let rec add_reg_bindings (reg_var_lst : reg * idc3 list): unit =
+  match reg_var_lst with
+  | [] -> ()
+  | (head_reg, head_var) :: tail_lst ->
+    begin
+      Hashtbl.replace reg_descriptor head_reg head_var;
+      add_reg_bindings tail_lst
+    end
+
+(* Remove register binding *)
+let rec remove_reg_bindings_for_vars (var_lst : idc3 list): unit =
+  match var_lst with
+  | [] -> ()
+  | head_var :: tail_lst ->
+    begin
+      let (found, head_reg) = find_reg_contain_var head_var in
+      let _ =
+        if found
+        then Hashtbl.remove head_reg
+        else ()
+      in remove_reg_bindings_for_vars tail_lst
+    end
+
 (* Return a register that can be used to hold variable value. A list of exluded
    registers can be specified, if so, the returned register will not be in
    the excluded list. The return register comes with a flag whether the current
