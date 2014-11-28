@@ -171,15 +171,19 @@ let get_reg_three
   in ((left_need_spill, left_reg), (right_need_spill_1, right_reg_1),
       (right_need_spill_2, right_reg_2))
 
+
 let rec spill_reg lst = 
   match lst with
-  | [] -> true
+  | [] -> []
   | (need_to_spill, r)::lst -> 
     if need_to_spill 
     then let var_to_spill = Hashtbl.find reg_descriptor r in
-    spill_reg lst
+      let addresses = Hashtbl.find var_descriptor var_to_spill in
+      if (List.length addresses) != 1 then failwith ("descriptor for variable not found: " ^ (string_of_idc3 var_to_spill))
+      else let address = List.nth addresses 0 in 
+      let str_instr = STR ("", "", r, address) in
+      str_instr::(spill_reg lst)
     else spill_reg lst
-
 
 
 
@@ -200,13 +204,14 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
       match ir3_exp with
       | BinaryExp3 (ir3_op, idc3a, idc3b) ->
         let ((spilled1, rleft), (spilled2, rright1), (spilled3, rright2)) = get_reg_three (Var3 leftid) idc3a idc3b in 
-        let _ = spill_reg [(spilled1, rleft); (spilled2, rright1); (spilled3, rright2)] in 
+        let spill_instrs = spill_reg [(spilled1, rleft); (spilled2, rright1); (spilled3, rright2)] in 
+        let assgn_instr = 
         begin
           match ir3_op with
             | BooleanOp op -> 
               if (op = "&&") then [AND ("", false, rleft, rright1, RegOp rright2)]
               else if (op = "||") then [ORR ("", false, rleft, rright1, RegOp rright2)]
-              else failwith ("unrecognised booleanop"^op)
+              else failwith ("unrecognised booleanop "^op)
             | RelationalOp op -> 
               let cmp_instr = CMP ("", rright1, RegOp rright2) in 
               let true_cond = 
@@ -216,7 +221,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
                 else if (op = ">=") then "ge"
                 else if (op = "==") then "eq"
                 else if (op = "!=") then "ne"
-                else failwith ("unrecognised booleanop"^op) in 
+                else failwith ("unrecognised RelationalOp "^op) in 
               let false_cond = 
                 if (op = "<") then "ge"
                 else if (op = ">") then "le"
@@ -224,12 +229,16 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
                 else if (op = ">=") then "lt"
                 else if (op = "==") then "ne"
                 else if (op = "!=") then "eq"
-                else failwith ("unrecognised booleanop"^op) in 
+                else failwith ("unrecognised RelationalOp "^op) in 
               let mov_instr1 = MOV (true_cond, false, rleft, ImmedOp "#1") in 
               let mov_instr2 = MOV (false_cond, false, rleft, ImmedOp "#0") in 
               [cmp_instr; mov_instr1; mov_instr2]
-            | AritmeticOp op -> []
-        end
+            | AritmeticOp op -> 
+              if (op = "+") then [ADD ("", false, rleft, rright1, RegOp rright2)]
+              else if (op = "-") then [SUB ("", false, rleft, rright1, RegOp rright2)] 
+              else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
+              else failwith ("unrecognised AritmeticOp "^op)             
+        end in spill_instrs@assgn_instr
       | UnaryExp3 (ir3_op, idc3) -> []
       | FieldAccess3 (id3a, id3b) -> []
       | Idc3Expr idc3 -> []
