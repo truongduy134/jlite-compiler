@@ -10,6 +10,8 @@ open Common_helper
 let reg_descriptor = Hashtbl.create 15
 let var_descriptor = Hashtbl.create 5000
 let arm_value_regs = ["v1"; "v2"; "v3"; "v4"; "v5"]
+(* Globle var for storing Pseudo Instruction *)
+let pseudoInstrList = [(PseudoInstr ".data")]
 
 (* Convert a hash table to a list of pairs (key, value) *)
 let hashtbl_to_list hashtbl =
@@ -173,17 +175,22 @@ let get_reg_three
 
 
 let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt) = 
+  let to_armlabel (label:label3) = let armlabel = "."^label in (Label armlabel) in
   match stmt with
-  | Label3 label3 -> let armlabel = "."^label3 in [(Label armlabel)]
+  | Label3 label3 -> [(to_armlabel label3)]
   | IfStmt3 (ir3_exp, label3) -> 
                                 begin 
                                 match ir3_exp with
                                 | (BooleanOp op,BoolLiteral3 b1,BoolLiteral3 b2) -> []
                                 | _ -> failwith ""
                                 end
-  | GoTo3 label3 -> let armlabel = "."^label3 in [(B ("", armlabel))]
+  | GoTo3 label3 -> [(B ("", to_armlabel label3))]
   | ReadStmt3 id3  -> failwith "not implemented yet"
-  | PrintStmt3 idc3 -> failwith "not implemented yet"
+  | PrintStmt3 idc3 -> 
+                      begin
+                        match idc3 with
+                        | (StringLiteral3 str) as s -> 
+                      end
   | AssignStmt3 (d3, ir3_exp) -> failwith "not implemented yet"
   | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> failwith "not implemented yet"
   | AssignFieldStmt3 (ir3_exp, ir3_exp) -> failwith "not implemented yet"
@@ -193,8 +200,6 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
 
 
 let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) = []
-
-
 
 (* Transform an IR3 program to IR3 *)
 let ir3_program_to_arm
