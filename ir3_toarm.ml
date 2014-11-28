@@ -78,7 +78,7 @@ let has_value_in_memory (var : idc3): bool =
     in helper store_locations
 
 (* Add binding register to the variable it is holding variable *)
-let rec add_reg_bindings (reg_var_lst : reg * idc3 list): unit =
+let rec add_reg_bindings (reg_var_lst : (reg * idc3) list): unit =
   match reg_var_lst with
   | [] -> ()
   | (head_reg, head_var) :: tail_lst ->
@@ -96,25 +96,29 @@ let rec remove_reg_bindings_for_vars (var_lst : idc3 list): unit =
       let (found, head_reg) = find_reg_contain_var head_var in
       let _ =
         if found
-        then Hashtbl.remove head_reg
+        then Hashtbl.remove reg_descriptor head_reg
         else ()
       in remove_reg_bindings_for_vars tail_lst
     end
 
 (* Return a register that can be used to hold variable value. A list of exluded
    registers can be specified, if so, the returned register will not be in
-   the excluded list. The return register comes with a flag whether the current
-   variable value in the register (if any) should be spilled or not.
+   the excluded list. The return register comes with an integer value:
+   0: target variable's value is already in the returned register
+   1: target variable's value is not in the returned register, but there
+      is no spilling
+   2: target variable's value is not in the returned register, but there
+      is spilling
    Assume we can always find such register *)
 let get_reg_single
   (target_var : idc3)
-  (excluded_reg_lst : reg list option): bool * reg =
+  (excluded_reg_lst : reg list option): int * reg =
   match (find_reg_contain_var target_var) with
-  | (true, result_reg) -> (false, result_reg)
+  | (true, result_reg) -> (0, result_reg)
   | (false, _) ->
     begin
     match (find_empty_value_reg ()) with
-    | (true, result_reg) -> (false, result_reg)
+    | (true, result_reg) -> (1, result_reg)
     | (false, _) ->
       begin
         let excluded_regs =
@@ -148,56 +152,66 @@ let get_reg_single
           in
             begin
               match (choose_non_spill reg_status_lst) with
-              | (true, result) -> result
+              | (true, (stat, m_reg)) -> (1, m_reg)
               | (false, _) ->
                 let lst_length = List.length reg_status_lst in
-                List.nth reg_status_lst (Random.int lst_length)
+                let (stat, m_reg) =
+                  List.nth reg_status_lst (Random.int lst_length)
+                in (2, m_reg)
             end
       end
     end
 
 (* Return registers that can be used to hold values for two input variables.
-   Each return register comes with a flag whether the current
-   variable value in the register (if any) should be spilled or not.
+   Each return register comes with an integer value:
+   0: target variable's value is already in the returned register
+   1: target variable's value is not in the returned register, but there
+      is no spilling
+   2: target variable's value is not in the returned register, but there
+      is spilling
    This function is suitable for finding registers for copy instructions or
    instructions with right-hand side involving only 1 variable operand
    Assume we can always find such registers *)
 let get_reg_two
   (left_var : idc3)
-  (right_var : idc3): (bool * reg) * (bool * reg) =
-  let (right_need_spill, right_reg) = get_reg_single right_var None in
+  (right_var : idc3): (int * reg) * (int * reg) =
+  let (right_flg, right_reg) = get_reg_single right_var None in
   if left_var = right_var
-  then ((false, right_reg), (right_need_spill, right_reg))
+  then ((0, right_reg), (right_flg, right_reg))
   else
-  let (left_need_spill, left_reg) = get_reg_single left_var (Some [right_reg])
-  in ((left_need_spill, left_reg), (right_need_spill, right_reg))
+  let (left_flg, left_reg) = get_reg_single left_var (Some [right_reg])
+  in ((left_flg, left_reg), (right_flg, right_reg))
 
 (* Return registers that can be used to hold values for three input variables.
-   Each return register comes with a flag whether the current
-   variable value in the register (if any) should be spilled or not.
+   Each return register comes with an integer value:
+   0: target variable's value is already in the returned register
+   1: target variable's value is not in the returned register, but there
+      is no spilling
+   2: target variable's value is not in the returned register, but there
+      is spilling
    This function is suitable for finding registers for instructions with
    right-hand side involving only 2 variable operands
    Assume we can always find such registers *)
 let get_reg_three
   (left_var : idc3)
   (right_var_1 : idc3)
-  (right_var_2 : idc3): (bool * reg) * (bool * reg) * (bool * reg) =
+  (right_var_2 : idc3): (int * reg) * (int * reg) * (int * reg) =
   let hashtbl = Hashtbl.create 2 in
-  let (right_need_spill_1, right_reg_1) = get_reg_single right_var_1 None in
-  let _ = Hashtbl.add hashtbl right_var_1 (right_need_spill_1, right_reg_1) in
-  let (right_need_spill_2, right_reg_2) =
+  let (right_flg_1, right_reg_1) = get_reg_single right_var_1 None in
+  let _ = Hashtbl.add hashtbl right_var_1 (right_flg_1, right_reg_1) in
+  let (right_flg_2, right_reg_2) =
     if right_var_1 = right_var_2
-    then (false, right_reg_1)
+    then (0, right_reg_1)
     else get_reg_single right_var_2 (Some [right_reg_1])
   in
-  let _ = Hashtbl.replace hashtbl right_var_2 (right_need_spill_2, right_reg_2)
+  let _ = Hashtbl.replace hashtbl right_var_2 (right_flg_2, right_reg_2)
   in
-  let (left_need_spill, left_reg) =
+  let (left_flg, left_reg) =
     if Hashtbl.mem hashtbl left_var
     then Hashtbl.find hashtbl left_var
     else get_reg_single right_var_2 (Some [right_reg_1; right_reg_2])
-  in ((left_need_spill, left_reg), (right_need_spill_1, right_reg_1),
-      (right_need_spill_2, right_reg_2))
+  in ((left_flg, left_reg), (right_flg_1, right_reg_1),
+      (right_flg_2, right_reg_2))
 
 
 let rec select_var_address addresses = 
