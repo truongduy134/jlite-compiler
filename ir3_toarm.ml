@@ -78,7 +78,7 @@ let has_value_in_memory (var : idc3): bool =
     in helper store_locations
 
 (* Add binding register to the variable it is holding variable *)
-let rec add_reg_bindings (reg_var_lst : reg * idc3 list): unit =
+let rec add_reg_bindings (reg_var_lst : (reg * idc3) list): unit =
   match reg_var_lst with
   | [] -> ()
   | (head_reg, head_var) :: tail_lst ->
@@ -96,7 +96,7 @@ let rec remove_reg_bindings_for_vars (var_lst : idc3 list): unit =
       let (found, head_reg) = find_reg_contain_var head_var in
       let _ =
         if found
-        then Hashtbl.remove head_reg
+        then Hashtbl.remove reg_descriptor head_reg
         else ()
       in remove_reg_bindings_for_vars tail_lst
     end
