@@ -173,11 +173,15 @@ let get_reg_three
 
 
 let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt) = 
-  []
-(*   match stmt with
-  | Label3 label3 -> failwith "not implemented yet"
-  | IfStmt3 (ir3_exp, label3) -> failwith "not implemented yet"
-  | GoTo3 label3 -> failwith "not implemented yet"
+  match stmt with
+  | Label3 label3 -> let armlabel = "."^label3 in [(Label armlabel)]
+  | IfStmt3 (ir3_exp, label3) -> 
+                                begin 
+                                match ir3_exp with
+                                | (BooleanOp op,BoolLiteral3 b1,BoolLiteral3 b2) -> []
+                                | _ -> failwith ""
+                                end
+  | GoTo3 label3 -> let armlabel = "."^label3 in [(B ("", armlabel))]
   | ReadStmt3 id3  -> failwith "not implemented yet"
   | PrintStmt3 idc3 -> failwith "not implemented yet"
   | AssignStmt3 (d3, ir3_exp) -> failwith "not implemented yet"
