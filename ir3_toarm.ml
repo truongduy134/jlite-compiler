@@ -170,6 +170,30 @@ let get_reg_three
   in ((left_need_spill, left_reg), (right_need_spill_1, right_reg_1),
       (right_need_spill_2, right_reg_2))
 
+
+
+let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt) = 
+  match stmt with
+  | Label3 label3 -> failwith "not implemented yet"
+  | IfStmt3 (ir3_exp, label3) -> failwith "not implemented yet"
+  | GoTo3 label3 -> failwith "not implemented yet"
+  | ReadStmt3 id3  -> failwith "not implemented yet"
+  | PrintStmt3 idc3 -> failwith "not implemented yet"
+  | AssignStmt3 (d3, ir3_exp) -> failwith "not implemented yet"
+  | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> failwith "not implemented yet"
+  | AssignFieldStmt3 (ir3_exp, ir3_exp) -> failwith "not implemented yet"
+  | MdCallStmt3 ir3_exp -> failwith "not implemented yet"
+  | ReturnStmt3 id3 -> failwith "not implemented yet"
+  | ReturnVoidStmt3 -> failwith "not implemented yet"
+
+
+let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) = []
+
+
+
 (* Transform an IR3 program to IR3 *)
 let ir3_program_to_arm
-  ((struct_list, main_md, md_list): ir3_program): arm_program = []
+  ((struct_list, main_md, md_list): ir3_program): arm_program = 
+  let mds_in_arms = List.map (ir3_md_to_arm struct_list) md_list in 
+  let main_in_arms = ir3_md_to_arm struct_list main_md in 
+  List.concat (main_in_arms::mds_in_arms)
