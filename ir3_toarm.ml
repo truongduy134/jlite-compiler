@@ -200,18 +200,34 @@ let get_reg_three
       (right_need_spill_2, right_reg_2))
 
 
+let rec select_var_address addresses = 
+  match addresses with
+  | [] -> failwith "no suitable address"
+  | address::addresses -> 
+    begin
+      match address with
+      | RegPreIndexed (r, offset, boolean) -> address
+      | _ -> select_var_address addresses
+    end
+
 let rec spill_reg lst = 
   match lst with
   | [] -> []
-  | (need_to_spill, r)::lst -> 
-    if need_to_spill 
+  | (need_to_spill, r, id)::lst -> 
+    let str_instr = 
+    if need_to_spill == 2
     then let var_to_spill = Hashtbl.find reg_descriptor r in
       let addresses = Hashtbl.find var_descriptor var_to_spill in
-      if (List.length addresses) != 1 then failwith ("descriptor for variable not found: " ^ (string_of_idc3 var_to_spill))
-      else let address = List.nth addresses 0 in 
-      let str_instr = STR ("", "", r, address) in
-      str_instr::(spill_reg lst)
-    else spill_reg lst
+      let address = select_var_address addresses in 
+      STR ("", "", r, address)
+    else [] in 
+    let ldr_instr = 
+    if (need_to_spill == 2 || need_to_spill == 1) then 
+      let addresses = Hashtbl.find var_descriptor id in
+      let address = select_var_address addresses in 
+    LDR ("", "", r, address)
+    else [] in 
+    str_instr@ldr_instr@(spill_reg lst)
 
 
 let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:label) (stmt:ir3_stmt)  = 
@@ -232,7 +248,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
       match ir3_exp with
       | BinaryExp3 (ir3_op, idc3a, idc3b) ->
         let ((spilled1, rleft), (spilled2, rright1), (spilled3, rright2)) = get_reg_three (Var3 leftid) idc3a idc3b in 
-        let spill_instrs = spill_reg [(spilled1, rleft); (spilled2, rright1); (spilled3, rright2)] in 
+        let spill_instrs = spill_reg [(spilled1, rleft, leftid); (spilled2, rright1, leftid); (spilled3, rright2, leftid)] in 
         let assgn_instr = 
         begin
           match ir3_op with
