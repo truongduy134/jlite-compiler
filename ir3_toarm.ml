@@ -77,6 +77,30 @@ let has_value_in_memory (var : idc3): bool =
     let store_locations = Hashtbl.find var_descriptor var
     in helper store_locations
 
+(* Add binding register to the variable it is holding variable *)
+let rec add_reg_bindings (reg_var_lst : reg * idc3 list): unit =
+  match reg_var_lst with
+  | [] -> ()
+  | (head_reg, head_var) :: tail_lst ->
+    begin
+      Hashtbl.replace reg_descriptor head_reg head_var;
+      add_reg_bindings tail_lst
+    end
+
+(* Remove register binding *)
+let rec remove_reg_bindings_for_vars (var_lst : idc3 list): unit =
+  match var_lst with
+  | [] -> ()
+  | head_var :: tail_lst ->
+    begin
+      let (found, head_reg) = find_reg_contain_var head_var in
+      let _ =
+        if found
+        then Hashtbl.remove head_reg
+        else ()
+      in remove_reg_bindings_for_vars tail_lst
+    end
+
 (* Return a register that can be used to hold variable value. A list of exluded
    registers can be specified, if so, the returned register will not be in
    the excluded list. The return register comes with a flag whether the current
@@ -254,7 +278,8 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             else failwith "unrecognized op"
           | _ -> failwith "unrecognized op"
         end
-      | FieldAccess3 (id3a, id3b) -> []
+      | FieldAccess3 (id3a, id3b) ->
+        let 
       | Idc3Expr idc3 -> 
         let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
         let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
@@ -263,7 +288,70 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
       | ObjectCreate3 c -> []
     end
   | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> []
-  | AssignFieldStmt3 (ir3_exp1, ir3_exp2) -> []
+  | AssignFieldStmt3 (ir3_exp1, ir3_exp2) ->
+    begin
+      match ir3_exp1 with
+      | FieldAccess3 (id1, id2) -> 
+        begin
+        match ir3_exp2 with
+        | BinaryExp3 (ir3_op, idc3a, idc3b) ->
+          let ((spilled1, rleft), (spilled2, rright1), (spilled3, rright2)) = get_reg_three (Var3 "_____temp") idc3a idc3b in 
+          let spill_instrs = spill_reg [(spilled1, rleft); (spilled2, rright1); (spilled3, rright2)] in 
+          let assgn_instr = 
+          begin
+            match ir3_op with
+              | BooleanOp op -> 
+                if (op = "&&") then [AND ("", false, rleft, rright1, RegOp rright2)]
+                else if (op = "||") then [ORR ("", false, rleft, rright1, RegOp rright2)]
+                else failwith ("unrecognised booleanop "^op)
+              | RelationalOp op -> 
+                let cmp_instr = CMP ("", rright1, RegOp rright2) in 
+                let true_cond = 
+                  if (op = "<") then "lt"
+                  else if (op = ">") then "gt"
+                  else if (op = "<=") then "le"
+                  else if (op = ">=") then "ge"
+                  else if (op = "==") then "eq"
+                  else if (op = "!=") then "ne"
+                  else failwith ("unrecognised RelationalOp "^op) in 
+                let false_cond = 
+                  if (op = "<") then "ge"
+                  else if (op = ">") then "le"
+                  else if (op = "<=") then "gt"
+                  else if (op = ">=") then "lt"
+                  else if (op = "==") then "ne"
+                  else if (op = "!=") then "eq"
+                  else failwith ("unrecognised RelationalOp "^op) in 
+                let mov_instr1 = MOV (true_cond, false, rleft, ImmedOp "#1") in 
+                let mov_instr2 = MOV (false_cond, false, rleft, ImmedOp "#0") in 
+                [cmp_instr; mov_instr1; mov_instr2]
+              | AritmeticOp op -> 
+                if (op = "+") then [ADD ("", false, rleft, rright1, RegOp rright2)]
+                else if (op = "-") then [SUB ("", false, rleft, rright1, RegOp rright2)] 
+                else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
+                else failwith ("unrecognised AritmeticOp "^op)             
+          end in spill_instrs@assgn_instr
+        | UnaryExp3 (ir3_op, idc3) -> 
+          let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
+          let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
+          begin
+            match ir3_op with
+            | UnaryOp op -> 
+              if (op = "-") then [RSB ("", false, rleft, rright, ImmedOp "#0")]
+              else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")]
+            | _ -> failwith "unrecognized op"
+          end
+        | FieldAccess3 (id3a, id3b) ->
+          let 
+        | Idc3Expr idc3 -> 
+          let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
+          let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
+          [MOV ("", false, rleft, RegOp rright)]
+        | MdCall3 (id3, idc3s) -> []
+        | ObjectCreate3 c -> []
+        end
+      | _ -> failwith "invalid field assign stmt"
+    end
   | MdCallStmt3 ir3_exp -> []
   | ReturnStmt3 id3 -> 
     (* need to check if a1 needs to be spilled *)[MOV ("",false,"a1", RegOp id3); B ("",exit_label)] (*need get reg for id3*)
