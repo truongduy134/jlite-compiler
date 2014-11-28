@@ -3,6 +3,7 @@
 (*   Transformation from IR3 to ARM assembly code   *)
 (* ===================================================== *)
 
+open Jlite_structs
 open Arm_structs
 open Ir3_structs
 open Common_helper
@@ -171,9 +172,9 @@ let get_reg_three
       (right_need_spill_2, right_reg_2))
 
 
-
 let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt) = 
-  match stmt with
+  []
+(*   match stmt with
   | Label3 label3 -> failwith "not implemented yet"
   | IfStmt3 (ir3_exp, label3) -> failwith "not implemented yet"
   | GoTo3 label3 -> failwith "not implemented yet"
@@ -184,11 +185,43 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
   | AssignFieldStmt3 (ir3_exp, ir3_exp) -> failwith "not implemented yet"
   | MdCallStmt3 ir3_exp -> failwith "not implemented yet"
   | ReturnStmt3 id3 -> failwith "not implemented yet"
-  | ReturnVoidStmt3 -> failwith "not implemented yet"
+  | ReturnVoidStmt3 -> failwith "not implemented yet" *)
+
+let exit_label_gen = new label_gen ".L"
+
+let rec get_obj_size (struct_list:cdata3 list) (obj:class_name) = 
+  let rec helper lst cname = 
+    match lst with
+    | [] -> failwith "class name not found"
+    | (c, vars)::lst -> 
+      if (c = obj) then get_num_of_data struct_list vars 
+      else helper lst cname in 
+  helper struct_list obj
+
+and get_num_of_data (struct_list:cdata3 list) (vars:var_decl3 list) = 
+  match vars with
+  | [] -> 0
+  | (t, id)::vars -> 
+    begin
+      match t with
+      | ObjectT obj -> (get_obj_size struct_list obj) + (get_num_of_data (struct_list:cdata3 list) vars)
+      | _ -> 1 + (get_num_of_data (struct_list:cdata3 list) vars)
+    end
 
 
-let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) = []
-
+let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) =
+  let md_start_label = Label md_decl.id3 in 
+  let exitLabel = (exit_label_gen#fresh^"exit:") in 
+  let stmfd_instr = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in 
+  let set_fp_instr = ADD ("", false, "fp", "sp", ImmedOp "#24") in 
+  let offset = (List.length md_decl.params3) + (get_num_of_data struct_list md_decl.localvars3) - 1 in 
+  let offset_str = "#"^(string_of_int (offset*4 + 24)) in 
+  let set_sp_instr = SUB ("", false, "sp", "fp", ImmedOp offset_str) in 
+  let body_arm = List.concat (List.map (ir3_stmt_to_arm struct_list md_decl) md_decl.ir3stmts) in 
+  let exit_instr_label = Label exitLabel in 
+  let reset_sp_instr = SUB ("", false, "sp", "fp", ImmedOp "#24") in 
+  let ldmfd_instr = LDMFD (["fp"; "pc"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
+  (md_start_label::stmfd_instr::set_fp_instr::set_sp_instr::body_arm)@([exit_instr_label; reset_sp_instr; ldmfd_instr])
 
 
 (* Transform an IR3 program to IR3 *)
@@ -196,4 +229,4 @@ let ir3_program_to_arm
   ((struct_list, main_md, md_list): ir3_program): arm_program = 
   let mds_in_arms = List.map (ir3_md_to_arm struct_list) md_list in 
   let main_in_arms = ir3_md_to_arm struct_list main_md in 
-  List.concat (main_in_arms::mds_in_arms)
+  List.concat (mds_in_arms@[main_in_arms])
