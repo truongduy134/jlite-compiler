@@ -11,7 +11,9 @@ let reg_descriptor = Hashtbl.create 15
 let var_descriptor = Hashtbl.create 5000
 let arm_value_regs = ["v1"; "v2"; "v3"; "v4"; "v5"]
 (* Globle var for storing Pseudo Instruction *)
-let pseudoInstrList = [(PseudoInstr ".data")]
+let pseudoInstrList = []
+let labelcount = ref 0
+let next_label () = (labelcount:=!labelcount+1; "L"^(string_of_int !labelcount))
 
 (* Convert a hash table to a list of pairs (key, value) *)
 let hashtbl_to_list hashtbl =
@@ -189,7 +191,8 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
   | PrintStmt3 idc3 -> 
                       begin
                         match idc3 with
-                        | (StringLiteral3 str) as s -> 
+                        | (StringLiteral3 str) -> pseudoInstrList@[(Label next_label()),(PseudoInstr ".asciz \""^str^"\"")];(BL ("","printf(PLT)"))
+                        | _ -> failwith "not implemented yet"
                       end
   | AssignStmt3 (d3, ir3_exp) -> failwith "not implemented yet"
   | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> failwith "not implemented yet"
