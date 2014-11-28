@@ -3,6 +3,7 @@
 (*   Transformation from IR3 to ARM assembly code   *)
 (* ===================================================== *)
 
+open Jlite_structs
 open Arm_structs
 open Ir3_structs
 open Common_helper
@@ -174,39 +175,130 @@ let get_reg_three
   in ((left_need_spill, left_reg), (right_need_spill_1, right_reg_1),
       (right_need_spill_2, right_reg_2))
 
+let rec spill_reg lst = 
+  match lst with
+  | [] -> true
+  | (need_to_spill, r)::lst -> 
+    if need_to_spill 
+    then let var_to_spill = Hashtbl.find reg_descriptor r in
+    spill_reg lst
+    else spill_reg lst
+
+
 
 
 let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt) = 
   let to_armlabel (label:label3) = let armlabel = "."^label in (Label armlabel) in
   match stmt with
-  | Label3 label3 -> [(to_armlabel label3)]
+  | Label3 label3 -> let armlabel = "."^(string_of_int label3) in [(Label armlabel)]
   | IfStmt3 (ir3_exp, label3) -> 
                                 begin 
                                 match ir3_exp with
-                                | (BooleanOp op,BoolLiteral3 b1,BoolLiteral3 b2) -> []
+                                | BinaryExp3 (op, b1, b2) -> []
                                 | _ -> failwith ""
                                 end
-  | GoTo3 label3 -> [(B ("", to_armlabel label3))]
-  | ReadStmt3 id3  -> failwith "not implemented yet"
-  | PrintStmt3 idc3 -> 
-                      begin
-                        match idc3 with
-                        | (StringLiteral3 str) -> pseudoInstrList@[(Label next_label()),(PseudoInstr ".asciz \""^str^"\"")];(BL ("","printf(PLT)"))
-                        | _ -> failwith "not implemented yet"
-                      end
-  | AssignStmt3 (d3, ir3_exp) -> failwith "not implemented yet"
-  | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> failwith "not implemented yet"
-  | AssignFieldStmt3 (ir3_exp, ir3_exp) -> failwith "not implemented yet"
-  | MdCallStmt3 ir3_exp -> failwith "not implemented yet"
-  | ReturnStmt3 id3 -> failwith "not implemented yet"
-  | ReturnVoidStmt3 -> failwith "not implemented yet"
+  | GoTo3 label3 -> let armlabel = "."^(string_of_int label3) in [(B ("", armlabel))]
+  | ReadStmt3 id3  -> []
+  | PrintStmt3 idc3 -> []
+  | AssignStmt3 (leftid, ir3_exp) -> 
+    begin
+      match ir3_exp with
+      | BinaryExp3 (ir3_op, idc3a, idc3b) ->
+        let ((spilled1, rleft), (spilled2, rright1), (spilled3, rright2)) = get_reg_three (Var3 leftid) idc3a idc3b in 
+        let _ = spill_reg [(spilled1, rleft); (spilled2, rright1); (spilled3, rright2)] in 
+        begin
+          match ir3_op with
+            | BooleanOp op -> 
+              if (op = "&&") then [AND ("", false, rleft, rright1, RegOp rright2)]
+              else if (op = "||") then [ORR ("", false, rleft, rright1, RegOp rright2)]
+              else failwith ("unrecognised booleanop"^op)
+            | RelationalOp op -> 
+              let cmp_instr = CMP ("", rright1, RegOp rright2) in 
+              let true_cond = 
+                if (op = "<") then "lt"
+                else if (op = ">") then "gt"
+                else if (op = "<=") then "le"
+                else if (op = ">=") then "ge"
+                else if (op = "==") then "eq"
+                else if (op = "!=") then "ne"
+                else failwith ("unrecognised booleanop"^op) in 
+              let false_cond = 
+                if (op = "<") then "ge"
+                else if (op = ">") then "le"
+                else if (op = "<=") then "gt"
+                else if (op = ">=") then "lt"
+                else if (op = "==") then "ne"
+                else if (op = "!=") then "eq"
+                else failwith ("unrecognised booleanop"^op) in 
+              let mov_instr1 = MOV (true_cond, false, rleft, ImmedOp "#1") in 
+              let mov_instr2 = MOV (false_cond, false, rleft, ImmedOp "#0") in 
+              [cmp_instr; mov_instr1; mov_instr2]
+            | AritmeticOp op -> []
+        end
+      | UnaryExp3 (ir3_op, idc3) -> 
+        let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
+        let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
+        begin
+          match ir3_op with
+          | UnaryOp op -> 
+            if (op = "-") then [RSB ("", false, rleft, rright, ImmedOp "#0")]
+            else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")]
+          | _ -> failwith "unrecognized op"
+        end
+      | FieldAccess3 (id3a, id3b) -> []
+      | Idc3Expr idc3 -> 
+        let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
+        let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
+        [MOV ("", false, rleft, RegOp rright)]
+      | MdCall3 (id3, idc3s) -> []
+      | ObjectCreate3 c -> []
+    end
+  | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> []
+  | AssignFieldStmt3 (ir3_exp1, ir3_exp2) -> []
+  | MdCallStmt3 ir3_exp -> []
+  | ReturnStmt3 id3 -> []
+  | ReturnVoidStmt3 -> []
+
+let exit_label_gen = new label_gen ".L"
+
+let rec get_obj_size (struct_list:cdata3 list) (obj:class_name) = 
+  let rec helper lst cname = 
+    match lst with
+    | [] -> failwith "class name not found"
+    | (c, vars)::lst -> 
+      if (c = obj) then get_num_of_data struct_list vars 
+      else helper lst cname in 
+  helper struct_list obj
+
+and get_num_of_data (struct_list:cdata3 list) (vars:var_decl3 list) = 
+  match vars with
+  | [] -> 0
+  | (t, id)::vars -> 
+    begin
+      match t with
+      | ObjectT obj -> (get_obj_size struct_list obj) + (get_num_of_data (struct_list:cdata3 list) vars)
+      | _ -> 1 + (get_num_of_data (struct_list:cdata3 list) vars)
+    end
 
 
-let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) = []
+let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) =
+  let md_start_label = Label md_decl.id3 in 
+  let exitLabel = (exit_label_gen#fresh^"exit:") in 
+  let stmfd_instr = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in 
+  let set_fp_instr = ADD ("", false, "fp", "sp", ImmedOp "#24") in 
+  let offset = (List.length md_decl.params3) + (get_num_of_data struct_list md_decl.localvars3) - 1 in 
+  let offset_str = "#"^(string_of_int (offset*4 + 24)) in 
+  let set_sp_instr = SUB ("", false, "sp", "fp", ImmedOp offset_str) in 
+  let body_arm = List.concat (List.map (ir3_stmt_to_arm struct_list md_decl) md_decl.ir3stmts) in 
+  let exit_instr_label = Label exitLabel in 
+  let reset_sp_instr = SUB ("", false, "sp", "fp", ImmedOp "#24") in 
+  let ldmfd_instr = LDMFD (["fp"; "pc"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
+  (md_start_label::stmfd_instr::set_fp_instr::set_sp_instr::body_arm)@([exit_instr_label; reset_sp_instr; ldmfd_instr])
+
 
 (* Transform an IR3 program to IR3 *)
 let ir3_program_to_arm
   ((struct_list, main_md, md_list): ir3_program): arm_program = 
   let mds_in_arms = List.map (ir3_md_to_arm struct_list) md_list in 
   let main_in_arms = ir3_md_to_arm struct_list main_md in 
-  List.concat (main_in_arms::mds_in_arms)
+  List.concat (mds_in_arms@[main_in_arms])
