@@ -190,10 +190,8 @@ let rec spill_reg lst =
     else spill_reg lst
 
 
-
-
-let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt) (exit_label:label) = 
-  let to_armlabel (label:label3) = let armlabel = "."^label in (Label armlabel) in
+let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:label) (stmt:ir3_stmt)  = 
+  let to_armlabel (label:label3) = let armlabel = "."^(string_of_int label) in (Label armlabel) in
   match stmt with
   | Label3 label3 -> let armlabel = "."^(string_of_int label3) in [(Label armlabel)]
   | IfStmt3 (ir3_exp, label3) -> 
@@ -245,9 +243,6 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
               else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
               else failwith ("unrecognised AritmeticOp "^op)             
         end in spill_instrs@assgn_instr
-      | UnaryExp3 (ir3_op, idc3) -> []
-            | AritmeticOp op -> []
-        end
       | UnaryExp3 (ir3_op, idc3) -> 
         let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
         let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
@@ -256,6 +251,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
           | UnaryOp op -> 
             if (op = "-") then [RSB ("", false, rleft, rright, ImmedOp "#0")]
             else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")]
+            else failwith "unrecognized op"
           | _ -> failwith "unrecognized op"
         end
       | FieldAccess3 (id3a, id3b) -> []
@@ -295,13 +291,30 @@ and get_num_of_data (struct_list:cdata3 list) (vars:var_decl3 list) =
       | _ -> 1 + (get_num_of_data (struct_list:cdata3 list) vars)
     end
 
+let set_var_descriptor (struct_list:cdata3 list) (vars:var_decl3 list) =
+  let rec helper (struct_list:cdata3 list) (vars:var_decl3 list) offset = 
+    match vars with
+      | [] -> true
+      | (t, id)::vars -> 
+        let size = 
+        begin
+          match t with
+          | ObjectT obj -> (get_obj_size struct_list obj) * 4
+          | _ -> 4
+        end in 
+      let address = RegPreIndexed ("fp", offset, false) in 
+      Hashtbl.add var_descriptor (Var3 id) [address]; helper struct_list vars (offset-size) in 
+  Hashtbl.clear var_descriptor; helper struct_list vars (-28)
+
+
 
 let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) =
   let md_start_label = Label md_decl.id3 in 
   let exitLabel = (exit_label_gen#fresh^"exit:") in 
   let stmfd_instr = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in 
   let set_fp_instr = ADD ("", false, "fp", "sp", ImmedOp "#24") in 
-  let offset = (List.length md_decl.params3) + (get_num_of_data struct_list md_decl.localvars3) - 1 in 
+  let _ = set_var_descriptor struct_list (md_decl.params3@md_decl.localvars3) in 
+  let offset = (List.length md_decl.params3) + (get_num_of_data struct_list md_decl.localvars3) in 
   let offset_str = "#"^(string_of_int (offset*4 + 24)) in 
   let set_sp_instr = SUB ("", false, "sp", "fp", ImmedOp offset_str) in 
   let body_arm = List.concat (List.map (ir3_stmt_to_arm struct_list md_decl exitLabel) md_decl.ir3stmts) in 
