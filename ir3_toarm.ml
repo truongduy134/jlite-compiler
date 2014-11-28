@@ -78,17 +78,17 @@ let has_value_in_memory (var : idc3): bool =
     in helper store_locations
 
 (* Add binding register to the variable it is holding variable *)
-let rec add_reg_bindings (reg_var_lst : reg * idc3 list): unit =
+(* let rec add_reg_bindings (reg_var_lst : reg * idc3 list): unit =
   match reg_var_lst with
   | [] -> ()
   | (head_reg, head_var) :: tail_lst ->
     begin
       Hashtbl.replace reg_descriptor head_reg head_var;
       add_reg_bindings tail_lst
-    end
+    end *)
 
 (* Remove register binding *)
-let rec remove_reg_bindings_for_vars (var_lst : idc3 list): unit =
+(* let rec remove_reg_bindings_for_vars (var_lst : idc3 list): unit =
   match var_lst with
   | [] -> ()
   | head_var :: tail_lst ->
@@ -99,7 +99,7 @@ let rec remove_reg_bindings_for_vars (var_lst : idc3 list): unit =
         then Hashtbl.remove head_reg
         else ()
       in remove_reg_bindings_for_vars tail_lst
-    end
+    end *)
 
 (* Return a register that can be used to hold variable value. A list of exluded
    registers can be specified, if so, the returned register will not be in
@@ -279,7 +279,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
           | _ -> failwith "unrecognized op"
         end
       | FieldAccess3 (id3a, id3b) ->
-        let 
+        []
       | Idc3Expr idc3 -> 
         let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
         let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
@@ -289,6 +289,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
     end
   | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> []
   | AssignFieldStmt3 (ir3_exp1, ir3_exp2) ->
+    let leftid = "_____temp" in
     begin
       match ir3_exp1 with
       | FieldAccess3 (id1, id2) -> 
@@ -339,10 +340,11 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             | UnaryOp op -> 
               if (op = "-") then [RSB ("", false, rleft, rright, ImmedOp "#0")]
               else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")]
+              else failwith "unrecognized op"
             | _ -> failwith "unrecognized op"
           end
         | FieldAccess3 (id3a, id3b) ->
-          let 
+          []
         | Idc3Expr idc3 -> 
           let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
           let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
