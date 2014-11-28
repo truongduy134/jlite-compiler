@@ -187,7 +187,7 @@ let rec spill_reg lst =
 
 
 
-let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt) = 
+let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt) (exit_label:label) = 
   let to_armlabel (label:label3) = let armlabel = "."^label in (Label armlabel) in
   match stmt with
   | Label3 label3 -> let armlabel = "."^(string_of_int label3) in [(Label armlabel)]
@@ -256,8 +256,10 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (stmt:ir3_stmt)
   | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> []
   | AssignFieldStmt3 (ir3_exp1, ir3_exp2) -> []
   | MdCallStmt3 ir3_exp -> []
-  | ReturnStmt3 id3 -> []
-  | ReturnVoidStmt3 -> []
+  | ReturnStmt3 id3 -> 
+    (* need to check if a1 needs to be spilled *)[MOV ("",false,"a1", RegOp id3); B ("",exit_label)] (*need get reg for id3*)
+  | ReturnVoidStmt3 -> 
+    [B ("",exit_label)]
 
 let exit_label_gen = new label_gen ".L"
 
@@ -289,7 +291,7 @@ let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) =
   let offset = (List.length md_decl.params3) + (get_num_of_data struct_list md_decl.localvars3) - 1 in 
   let offset_str = "#"^(string_of_int (offset*4 + 24)) in 
   let set_sp_instr = SUB ("", false, "sp", "fp", ImmedOp offset_str) in 
-  let body_arm = List.concat (List.map (ir3_stmt_to_arm struct_list md_decl) md_decl.ir3stmts) in 
+  let body_arm = List.concat (List.map (ir3_stmt_to_arm struct_list md_decl exitLabel) md_decl.ir3stmts) in 
   let exit_instr_label = Label exitLabel in 
   let reset_sp_instr = SUB ("", false, "sp", "fp", ImmedOp "#24") in 
   let ldmfd_instr = LDMFD (["fp"; "pc"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
