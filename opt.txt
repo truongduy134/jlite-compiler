@@ -1,0 +1,60 @@
+class Main {
+    void main() {
+		Int a; 
+        Int b;
+        Int c;
+        Int d;
+        Int e;
+        Int f;
+        Gen g;
+
+        g = new Gen();
+
+        // dead code
+        a = 4;
+        b = a + c;
+        d = 100 + a;
+
+        // copy prop + constant folding
+        a = 3; // -> ""
+        b = a; // -> ""
+        println(b); // -> println(3)
+        println("\n");
+
+        g.val = a;
+        println(g.val + 4); // -> println(7);
+        println("\n");
+
+        g.gen();
+        println(g.val); // no change
+        println("\n");
+
+        // copy prop + common sub expr
+        a = g.gen();
+        b = a; // -> ""
+        c = b; // -> ""
+        d = b + a; // -> a + a
+        e = c + b + d; // -> d + d
+        println(d + e);
+        println("\n"); // print 6
+
+        c = g.val + a;
+        println(g.val + a); // -> println(c);
+        println("\n");
+
+        // dead code
+        a = 4;
+        b = 5 + 10; // 15
+        c = b + a - 10; // 9
+        if (c > a) {
+            println("c > a\n"); // print this
+        } else {
+            println("c <= a\n");
+        }
+    }
+}
+
+class Gen {
+    Int val;
+    Int gen() { return 1; }
+}
