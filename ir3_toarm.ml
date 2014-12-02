@@ -201,7 +201,7 @@ let get_reg_three
   (left_var : idc3)
   (right_var_1 : idc3)
   (right_var_2 : idc3): (int * reg) * (int * reg) * (int * reg) =
-  print_endline ("get_reg_three: "^(string_of_idc3 left_var)^" "^(string_of_idc3 right_var_1)^" "^(string_of_idc3 right_var_2)^" ");
+  (* print_endline ("get_reg_three: "^(string_of_idc3 left_var)^" "^(string_of_idc3 right_var_1)^" "^(string_of_idc3 right_var_2)^" "); *)
   let hashtbl = Hashtbl.create 2 in
   let (right_flg_1, right_reg_1) = get_reg_single right_var_1 None in
   let _ = Hashtbl.add hashtbl right_var_1 (right_flg_1, right_reg_1) in
@@ -217,7 +217,7 @@ let get_reg_three
     then Hashtbl.find hashtbl left_var
     else get_reg_single left_var (Some [right_reg_1; right_reg_2])
   in
-  print_endline ("get_reg_three result: "^left_reg^" "^right_reg_1^" "^right_reg_2^" ");
+  (* print_endline ("get_reg_three result: "^left_reg^" "^right_reg_1^" "^right_reg_2^" "); *)
   ((left_flg, left_reg), (right_flg_1, right_reg_1),
       (right_flg_2, right_reg_2))
 
@@ -239,7 +239,7 @@ let rec spill_reg lst =
     let str_instr = 
     if (need_to_spill == 2)
     then let var_to_spill = Hashtbl.find reg_descriptor r in
-      print_endline "need to spill";
+      (* print_endline "need to spill"; *)
       if Hashtbl.mem var_descriptor var_to_spill then 
       let addresses = Hashtbl.find var_descriptor var_to_spill in
       let address = select_var_address addresses in 
@@ -326,7 +326,6 @@ let find_field_offset (struct_list:cdata3 list) (md_decl:md_decl3) (classname:id
       | _ -> failwith ("var of method is not of type object: "^(id))
     end else find_var_type lst var in 
   let cname = find_var_type ( md_decl.params3@md_decl.localvars3) classname in 
-  let _ = List.map (fun (x) -> print_endline (string_of_cdata3 x);()) struct_list in 
   let rec helper1 (struct_list:cdata3 list) (cname:id3) = 
   match struct_list with
   | [] -> failwith ("classname not found in cdata: "^cname)
@@ -414,7 +413,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                                         let armlabel = "."^(string_of_int label3) in 
                                         [cmp_instr; mov_instr1; mov_instr2; CMP ("",rleft,ImmedOp "#0"); B ("eq",armlabel)]
                                       | _ -> failwith "unrecognized op"
-                                    end in spill_instrs@assign_instrs
+                                    end in remove_reg_bindings_for_vars [(Var3 leftid); idc3a_name; idc3b_name]  ; spill_instrs@assign_instrs
                                   end
                                 | UnaryExp3 (ir3_op, idc3) -> 
                                   let leftid = "_____var1" in
@@ -433,7 +432,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                                       if (op = "!") then let armlabel = "."^(string_of_int label3) in [EOR ("", false, rleft, rright, ImmedOp "#1"); CMP ("",rleft,ImmedOp "#0"); B ("eq",armlabel)]
                                       else failwith "unrecognized op"
                                     | _ -> failwith "unrecognized op"
-                                  end in spill_instrs@assgn_instr
+                                  end in remove_reg_bindings_for_vars [(Var3 leftid); idc3_name]  ; spill_instrs@assgn_instr
                                 | Idc3Expr idc3 ->
                                   begin
                                     match idc3 with
@@ -447,7 +446,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                                           let (spilled, rright) = get_reg_single idc3_name None in
                                           let spill_instrs = spill_reg [(spilled, rright, idc3)] in
                                           let armlabel = "."^(string_of_int label3) in
-                                          spill_instrs@[CMP ("",rright,ImmedOp "#0"); B ("eq",armlabel)]
+                                          remove_reg_bindings_for_vars [idc3_name]  ;spill_instrs@[CMP ("",rright,ImmedOp "#0"); B ("eq",armlabel)]
                                        | _ -> failwith "invalid op"   
                                   end 
                                 | _ -> failwith "unrecognized exp"
@@ -528,7 +527,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
               else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
               else failwith ("unrecognised AritmeticOp "^op)
             | _ -> failwith "invalid op"             
-        end in spill_instrs@assgn_instr
+        end in remove_reg_bindings_for_vars [idc3a_name; idc3b_name] ;spill_instrs@assgn_instr
       | UnaryExp3 (ir3_op, idc3) -> 
         let idc3_name = 
         begin
@@ -546,7 +545,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")]
             else failwith "unrecognized op"
           | _ -> failwith "unrecognized op"
-        end in spill_instrs@assgn_instr
+        end in remove_reg_bindings_for_vars [idc3_name] ;spill_instrs@assgn_instr
       | FieldAccess3 (id3a, id3b) ->
         let (spilled1, rleft) = get_reg_single (Var3 leftid) None in 
         let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
@@ -568,7 +567,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
         end in 
         let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3_name in
         let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in
-        spill_instrs@[MOV ("", false, rleft, RegOp rright)]
+        remove_reg_bindings_for_vars [idc3_name]; spill_instrs@[MOV ("", false, rleft, RegOp rright)]
       | MdCall3 (id3, idc3s) ->
           let saving_argument_instrs = save_a1_to_a4 () in 
           let store_argument_instrs = store_argument idc3s in 
@@ -660,7 +659,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                 else if (op = "-") then [SUB ("", false, rleft, rright1, operand2)] 
                 else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
                 else failwith ("unrecognised AritmeticOp "^op)             
-          end in (spill_instrs@assgn_instr, rleft)
+          end in remove_reg_bindings_for_vars [idc3a_name; idc3b_name] ;(spill_instrs@assgn_instr, rleft)
         | UnaryExp3 (ir3_op, idc3) -> 
           let idc3_name = 
           begin
@@ -682,7 +681,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
               else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")]
               else failwith "unrecognized op"
             | _ -> failwith "unrecognized op"
-          end in (spill_instrs@assgn_instr, rleft)
+          end in remove_reg_bindings_for_vars [idc3_name] ;(spill_instrs@assgn_instr, rleft)
         | FieldAccess3 (id3a, id3b) ->
           let (spilled1, rleft) = get_reg_single (Var3 leftid) None in 
           let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
@@ -707,7 +706,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
           let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3_name in
           let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in
           (* spill_instrs@[MOV ("", false, rright, RegOp rright)] *)
-          (spill_instrs@[MOV ("", false, rleft, RegOp rright)], rleft)
+          remove_reg_bindings_for_vars [idc3_name] ;(spill_instrs@[MOV ("", false, rleft, RegOp rright)], rleft)
         | MdCall3 (id3, idc3s) ->
           let saving_argument_instrs = save_a1_to_a4 () in 
           let store_argument_instrs = store_argument idc3s in 
@@ -731,7 +730,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             | RegPreIndexed (reg, _ , _) -> RegPreIndexed (reg, offset, false)
             | _ -> failwith ("cannot find appropriate address for "^id1)
           end
-        in eva_instrs@[STR ("", "", r, address)]
+        in remove_reg_bindings_for_vars [Var3 leftid];eva_instrs@[STR ("", "", r, address)]
       | _ -> failwith "invalid field assign stmt"
     end
   | MdCallStmt3 ir3_exp ->
