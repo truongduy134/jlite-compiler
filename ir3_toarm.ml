@@ -652,7 +652,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             else 
             let addresses = Hashtbl.find var_descriptor (Var3 id3a) in
             select_var_address addresses 
-          in ([LDR ("", "", rleft, address)], rleft)
+          in (spill_instrs@[LDR ("", "", rleft, address)], rleft)
         | Idc3Expr idc3 -> 
           let idc3_name = 
           begin
@@ -665,7 +665,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
           let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3_name in
           let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in
           (* spill_instrs@[MOV ("", false, rright, RegOp rright)] *)
-          ([MOV ("", false, rleft, RegOp rright)], rleft)
+          (spill_instrs@[MOV ("", false, rleft, RegOp rright)], rleft)
         | MdCall3 (id3, idc3s) ->
           let store_argument_instrs = store_argument idc3s in 
           let calling_instr = [BL ("", (id3^"(PLT)"))] in 
@@ -688,7 +688,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             | RegPreIndexed (reg, _ , _) -> RegPreIndexed (reg, offset, false)
             | _ -> failwith ("cannot find appropriate address for "^id1)
           end
-        in [STR ("", "", r, address)]
+        in eva_instrs@[STR ("", "", r, address)]
       | _ -> failwith "invalid field assign stmt"
     end
   | MdCallStmt3 ir3_exp ->
