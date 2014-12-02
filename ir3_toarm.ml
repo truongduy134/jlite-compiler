@@ -418,7 +418,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
       match idc3 with
       | StringLiteral3 s -> let labelname=next_label() in 
                             let _ = 
-                            pseudoInstrList := !pseudoInstrList@[Label labelname; PseudoInstr (".asciz "^s)] in 
+                            pseudoInstrList := !pseudoInstrList@[Label labelname; PseudoInstr (".asciz \""^s^"\"")] in 
                             [LDR ("","","a1",LabelAddr labelname);BL ("","printf(PLT)")] 
       | _ -> failwith "unimplemented"
     end
