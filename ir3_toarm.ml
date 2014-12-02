@@ -280,6 +280,8 @@ let store_argument (arguments:(idc3 list)) =
     begin
       match idc with
       | Var3 id3 ->
+        let (hasReg, reg) = find_reg_contain_var (Var3 id3) in 
+        if hasReg then MOV ("", false, r, RegOp reg) else 
         let addresses = Hashtbl.find var_descriptor idc in
         let address = select_var_address addresses in 
         LDR ("", "", r, address)
