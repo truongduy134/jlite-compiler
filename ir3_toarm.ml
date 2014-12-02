@@ -368,7 +368,15 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                                 end
   | GoTo3 label3 -> let armlabel = "."^(string_of_int label3) in [(B ("", armlabel))]
   | ReadStmt3 id3  -> []
-  | PrintStmt3 idc3 -> []
+  | PrintStmt3 idc3 ->
+    begin
+      match idc3 with
+      | StringLiteral3 s -> let labelname=next_label() in 
+                            let _ = 
+                            pseudoInstrList@[Label labelname; PseudoInstr (".asciz "^s)] in 
+                            [LDR ("","","a1",LabelAddr labelname)] 
+      | _ -> failwith "unimplemented"
+    end
   | AssignStmt3 (leftid, ir3_exp) -> 
     begin
       match ir3_exp with
@@ -432,7 +440,8 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
               if (op = "+") then [ADD ("", false, rleft, rright1, operand2)]
               else if (op = "-") then [SUB ("", false, rleft, rright1, operand2)] 
               else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
-              else failwith ("unrecognised AritmeticOp "^op)             
+              else failwith ("unrecognised AritmeticOp "^op)
+            | _ -> failwith "invalid op"             
         end in spill_instrs@assgn_instr
       | UnaryExp3 (ir3_op, idc3) -> 
         let idc3_name = 
@@ -548,7 +557,8 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                 if (op = "+") then [ADD ("", false, rleft, rright1, operand2)]
                 else if (op = "-") then [SUB ("", false, rleft, rright1, operand2)] 
                 else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
-                else failwith ("unrecognised AritmeticOp "^op)             
+                else failwith ("unrecognised AritmeticOp "^op) 
+              | _ -> failwith "invalid op"            
           end in spill_instrs@assgn_instr
         | UnaryExp3 (ir3_op, idc3) -> 
           let idc3_name = 
@@ -679,5 +689,6 @@ let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) =
 let ir3_program_to_arm
   ((struct_list, main_md, md_list): ir3_program): arm_program = 
   let mds_in_arms = List.map (ir3_md_to_arm struct_list) md_list in 
-  let main_in_arms = ir3_md_to_arm struct_list main_md in 
-  List.concat (mds_in_arms@[main_in_arms])
+  let main_in_arms = ir3_md_to_arm struct_list main_md in
+  let data_in_arms = [PseudoInstr ".data"]@pseudoInstrList@[PseudoInstr ".text"; PseudoInstr ".global main"] in  
+  List.concat ([data_in_arms]@mds_in_arms@[main_in_arms])
