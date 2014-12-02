@@ -1,0 +1,23 @@
+class Main {
+
+void main(Int d){
+ Int t1;
+ 
+ Compute help;
+ help = new Compute();
+ t1 = help.square(d);
+}
+
+}
+
+class Compute {
+
+   Int chachedValue;
+
+   Int square(Int a){
+     Int chachedValue;  //allowed shadowing
+     chachedValue = 5;
+     return a*chachedValue;
+   }
+   
+}

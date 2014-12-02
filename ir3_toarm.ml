@@ -43,6 +43,7 @@ let find_reg_contain_var (var : idc3): bool * reg =
   in
     helper (hashtbl_to_list reg_descriptor) var
 
+
 (* Return an empty ARM value register if such exists *)
 let find_empty_value_reg (): bool * reg =
   let rec helper (reg_list : reg list): bool * reg =
@@ -79,8 +80,9 @@ let has_value_in_memory (var : idc3): bool =
 
 (* Add binding register to the variable it is holding variable *)
 let rec add_reg_bindings (reg_var_lst : (reg * idc3) list): unit =
+  print_endline "enter add reg binding";
   match reg_var_lst with
-  | [] -> ()
+  | [] -> print_endline "end of add reg binding list"; ()
   | (head_reg, head_var) :: tail_lst ->
     begin
       Hashtbl.replace reg_descriptor head_reg head_var;
@@ -226,25 +228,43 @@ let rec select_var_address addresses =
 
 let rec spill_reg lst = 
   match lst with
-  | [] -> []
+  | [] -> print_endline "end of spill_reg";[]
   | (need_to_spill, r, id)::lst -> 
     let str_instr = 
     if need_to_spill == 2
     then let var_to_spill = Hashtbl.find reg_descriptor r in
       let addresses = Hashtbl.find var_descriptor var_to_spill in
       let address = select_var_address addresses in 
-      STR ("", "", r, address)
+      (* print_endline "stuck here?"; *)
+      print_endline ("removing binding for "^(string_of_idc3 var_to_spill));
+      remove_reg_bindings_for_vars [var_to_spill];
+      (* print_endline "not stuck here!"; *)
+      [STR ("", "", r, address)]
     else [] in 
     let ldr_instr = 
     if (need_to_spill == 2 || need_to_spill == 1) then 
-      let addresses = Hashtbl.find var_descriptor id in
-      let address = select_var_address addresses in 
-    LDR ("", "", r, address)
+      begin
+        match id with
+        | Var3 id3 -> 
+          let addresses = Hashtbl.find var_descriptor id in
+          let address = select_var_address addresses in 
+          print_endline ("adding binding for "^(string_of_idc3 id)^" "^r);
+          add_reg_bindings [(r, id)];
+          print_endline "not stuck here!2";
+          [LDR ("", "", r, address)]
+        | IntLiteral3 i -> [MOV ("", false, r, ImmedOp ("#"^(string_of_int i)))]
+        | BoolLiteral3 b -> 
+          if b then [MOV ("", false, r, ImmedOp "#1")]
+          else [MOV ("", false, r, ImmedOp "#0")]
+        | StringLiteral3 s -> failwith ("cannot load string into register: "^s)
+      end
     else [] in 
     str_instr@ldr_instr@(spill_reg lst)
+    (* (spill_reg lst) *)
 
 
 let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:label) (stmt:ir3_stmt)  = 
+  print_endline ("translating stmt: " ^(string_of_ir3_stmt stmt));
   let to_armlabel (label:label3) = let armlabel = "."^(string_of_int label) in (Label armlabel) in
   match stmt with
   | Label3 label3 -> let armlabel = "."^(string_of_int label3) in [(Label armlabel)]
@@ -261,8 +281,10 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
     begin
       match ir3_exp with
       | BinaryExp3 (ir3_op, idc3a, idc3b) ->
+        print_endline "is BinaryExp3";
         let ((spilled1, rleft), (spilled2, rright1), (spilled3, rright2)) = get_reg_three (Var3 leftid) idc3a idc3b in 
-        let spill_instrs = spill_reg [(spilled1, rleft, leftid); (spilled2, rright1, leftid); (spilled3, rright2, leftid)] in 
+        print_endline ("got reg: "^((string_of_int spilled1)^" "^(rleft)^" ")^((string_of_int spilled2)^" "^(rright1)^" ")^((string_of_int spilled3)^" "^(rright2)^" "));
+        let spill_instrs = spill_reg [(spilled1, rleft, Var3 leftid); (spilled2, rright1, idc3a); (spilled3, rright2, idc3b)] in 
         let assgn_instr = 
         begin
           match ir3_op with
@@ -299,7 +321,8 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
         end in spill_instrs@assgn_instr
       | UnaryExp3 (ir3_op, idc3) -> 
         let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
-        let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
+        let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in
+        let assgn_instr = 
         begin
           match ir3_op with
           | UnaryOp op -> 
@@ -307,13 +330,13 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")]
             else failwith "unrecognized op"
           | _ -> failwith "unrecognized op"
-        end
+        end in spill_instrs@assgn_instr
       | FieldAccess3 (id3a, id3b) ->
         []
       | Idc3Expr idc3 -> 
         let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
-        let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
-        [MOV ("", false, rleft, RegOp rright)]
+        let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in
+        spill_instrs@[MOV ("", false, rleft, RegOp rright)]
       | MdCall3 (id3, idc3s) -> []
       | ObjectCreate3 c -> []
     end
@@ -326,14 +349,18 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
         begin
         match ir3_exp2 with
         | BinaryExp3 (ir3_op, idc3a, idc3b) ->
-          let ((spilled1, rleft), (spilled2, rright1), (spilled3, rright2)) = get_reg_three (Var3 "_____temp") idc3a idc3b in 
-          let spill_instrs = spill_reg [(spilled1, rleft); (spilled2, rright1); (spilled3, rright2)] in 
+          let ((spilled2, rright1), (spilled3, rright2)) = get_reg_two idc3a idc3b in 
+          (* let ((spilled1, rleft), (spilled2, rright1), (spilled3, rright2)) = get_reg_three (Var3 "_____temp") idc3a idc3b in  *)
+          let spill_instrs = spill_reg [(spilled2, rright1, idc3a); (spilled3, rright2, idc3b)] in 
+          (* let spill_instrs = spill_reg [(spilled1, rleft, Var3 leftid); (spilled2, rright1, idc3a); (spilled3, rright2, idc3b)] in  *)
           let assgn_instr = 
           begin
             match ir3_op with
               | BooleanOp op -> 
-                if (op = "&&") then [AND ("", false, rleft, rright1, RegOp rright2)]
-                else if (op = "||") then [ORR ("", false, rleft, rright1, RegOp rright2)]
+                if (op = "&&") then [AND ("", false, rright1, rright1, RegOp rright2)]
+                else if (op = "||") then [ORR ("", false, rright1, rright1, RegOp rright2)]
+                (* if (op = "&&") then [AND ("", false, rleft, rright1, RegOp rright2)]
+                else if (op = "||") then [ORR ("", false, rleft, rright1, RegOp rright2)] *)
                 else failwith ("unrecognised booleanop "^op)
               | RelationalOp op -> 
                 let cmp_instr = CMP ("", rright1, RegOp rright2) in 
@@ -353,32 +380,45 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                   else if (op = "==") then "ne"
                   else if (op = "!=") then "eq"
                   else failwith ("unrecognised RelationalOp "^op) in 
-                let mov_instr1 = MOV (true_cond, false, rleft, ImmedOp "#1") in 
-                let mov_instr2 = MOV (false_cond, false, rleft, ImmedOp "#0") in 
+                let mov_instr1 = MOV (true_cond, false, rright1, ImmedOp "#1") in 
+                let mov_instr2 = MOV (false_cond, false, rright1, ImmedOp "#0") in 
+                (* let mov_instr1 = MOV (true_cond, false, rleft, ImmedOp "#1") in 
+                let mov_instr2 = MOV (false_cond, false, rleft, ImmedOp "#0") in  *)
                 [cmp_instr; mov_instr1; mov_instr2]
               | AritmeticOp op -> 
-                if (op = "+") then [ADD ("", false, rleft, rright1, RegOp rright2)]
+                if (op = "+") then [ADD ("", false, rright1, rright1, RegOp rright2)]
+                else if (op = "-") then [SUB ("", false, rright1, rright1, RegOp rright2)] 
+                else if (op = "*") then [MUL ("", false, rright1, rright1, rright2)]  
+                (* if (op = "+") then [ADD ("", false, rleft, rright1, RegOp rright2)]
                 else if (op = "-") then [SUB ("", false, rleft, rright1, RegOp rright2)] 
-                else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
+                else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]   *)
                 else failwith ("unrecognised AritmeticOp "^op)             
           end in spill_instrs@assgn_instr
         | UnaryExp3 (ir3_op, idc3) -> 
-          let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
-          let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
+          let ((spilled2, rright)) = get_reg_single idc3 None in
+          (* let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in *)
+          let spill_instrs = spill_reg [(spilled2, rright, idc3)] in
+          (* let _ = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in *)
+          let assgn_instr =
           begin
             match ir3_op with
             | UnaryOp op -> 
-              if (op = "-") then [RSB ("", false, rleft, rright, ImmedOp "#0")]
-              else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")]
+              if (op = "-") then [RSB ("", false, rright, rright, ImmedOp "#0")]
+              else if (op = "!") then [EOR ("", false, rright, rright, ImmedOp "#1")]
+              (* if (op = "-") then [RSB ("", false, rleft, rright, ImmedOp "#0")]
+              else if (op = "!") then [EOR ("", false, rleft, rright, ImmedOp "#1")] *)
               else failwith "unrecognized op"
             | _ -> failwith "unrecognized op"
-          end
+          end in spill_instrs@assgn_instr
         | FieldAccess3 (id3a, id3b) ->
           []
         | Idc3Expr idc3 -> 
-          let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
-          let _ = spill_reg [(spilled1, rleft); (spilled2, rright)] in
-          [MOV ("", false, rleft, RegOp rright)]
+          let ((spilled2, rright)) = get_reg_single idc3 None in
+          let spill_instrs = spill_reg [(spilled2, rright, idc3)] in
+          (* let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3 in
+          let _ = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in *)
+          spill_instrs@[MOV ("", false, rright, RegOp rright)]
+          (* [MOV ("", false, rleft, RegOp rright)] *)
         | MdCall3 (id3, idc3s) -> []
         | ObjectCreate3 c -> []
         end
@@ -426,6 +466,16 @@ let set_var_descriptor (struct_list:cdata3 list) (vars:var_decl3 list) =
       Hashtbl.add var_descriptor (Var3 id) [address]; helper struct_list vars (offset-size) in 
   Hashtbl.clear var_descriptor; helper struct_list vars (-28)
 
+let set_reg_descriptor (md_decl:md_decl3) : unit = 
+  let rec helper (params:var_decl3 list) index = 
+  match params with
+  | [] -> ()
+  | (t, id)::params -> 
+    if index < 5
+    then let reg_to_use = "R"^(string_of_int index) in 
+    add_reg_bindings [(reg_to_use, Var3 id)]; helper params (index+1)
+    else helper params (index+1)
+  in Hashtbl.clear reg_descriptor ;helper md_decl.params3 1
 
 
 let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) =
@@ -434,6 +484,7 @@ let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) =
   let stmfd_instr = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in 
   let set_fp_instr = ADD ("", false, "fp", "sp", ImmedOp "#24") in 
   let _ = set_var_descriptor struct_list (md_decl.params3@md_decl.localvars3) in 
+  let _ = set_reg_descriptor md_decl in 
   let offset = (List.length md_decl.params3) + (get_num_of_data struct_list md_decl.localvars3) in 
   let offset_str = "#"^(string_of_int (offset*4 + 24)) in 
   let set_sp_instr = SUB ("", false, "sp", "fp", ImmedOp offset_str) in 
