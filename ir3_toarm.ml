@@ -201,6 +201,7 @@ let get_reg_three
   (left_var : idc3)
   (right_var_1 : idc3)
   (right_var_2 : idc3): (int * reg) * (int * reg) * (int * reg) =
+  print_endline ("get_reg_three: "^(string_of_idc3 left_var)^" "^(string_of_idc3 right_var_1)^" "^(string_of_idc3 right_var_2)^" ");
   let hashtbl = Hashtbl.create 2 in
   let (right_flg_1, right_reg_1) = get_reg_single right_var_1 None in
   let _ = Hashtbl.add hashtbl right_var_1 (right_flg_1, right_reg_1) in
@@ -215,7 +216,9 @@ let get_reg_three
     if Hashtbl.mem hashtbl left_var
     then Hashtbl.find hashtbl left_var
     else get_reg_single right_var_2 (Some [right_reg_1; right_reg_2])
-  in ((left_flg, left_reg), (right_flg_1, right_reg_1),
+  in 
+  print_endline ("get_reg_three result: "^left_reg^" "^right_reg_1^" "^right_reg_2^" ");
+  ((left_flg, left_reg), (right_flg_1, right_reg_1),
       (right_flg_2, right_reg_2))
 
 
@@ -698,7 +701,16 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
       | _ -> failwith ("invalid MdCallStmt3: "^(string_of_ir3_stmt stmt))
     end
   | ReturnStmt3 id3 -> 
-    (* need to check if a1 needs to be spilled *)[MOV ("",false,"a1", RegOp id3); B ("",exit_label)] (*need get reg for id3*)
+    let (hasReg, reg) = find_reg_contain_var (Var3 id3) in 
+    let store_instr = 
+    if hasReg then MOV ("",false,"a1", RegOp reg) 
+    else let address = 
+      if Hashtbl.mem var_descriptor (Var3 id3) then 
+      let addresses = Hashtbl.find var_descriptor (Var3 id3) in 
+      select_var_address addresses
+      else failwith ("value not found in reg or memory for : "^id3) in 
+    LDR ("", "", "a1", address)  in 
+    [store_instr;B ("",exit_label)] 
   | ReturnVoidStmt3 -> 
     [B ("",exit_label)]
 
