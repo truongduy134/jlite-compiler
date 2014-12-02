@@ -12,7 +12,7 @@ let reg_descriptor = Hashtbl.create 15
 let var_descriptor = Hashtbl.create 5000
 let arm_value_regs = ["v1"; "v2"; "v3"; "v4"; "v5"]
 (* Globle var for storing Pseudo Instruction *)
-let pseudoInstrList = []
+let pseudoInstrList = ref []
 let labelcount = ref 0
 let next_label () = (labelcount:=!labelcount+1; "L"^(string_of_int !labelcount))
 
@@ -411,7 +411,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
       match idc3 with
       | StringLiteral3 s -> let labelname=next_label() in 
                             let _ = 
-                            pseudoInstrList@[Label labelname; PseudoInstr (".asciz "^s)] in 
+                            pseudoInstrList := !pseudoInstrList@[Label labelname; PseudoInstr (".asciz "^s)] in 
                             [LDR ("","","a1",LabelAddr labelname);BL ("","printf(PLT)")] 
       | _ -> failwith "unimplemented"
     end
@@ -743,5 +743,5 @@ let ir3_program_to_arm
   ((struct_list, main_md, md_list): ir3_program): arm_program = 
   let mds_in_arms = List.map (ir3_md_to_arm struct_list) md_list in 
   let main_in_arms = ir3_md_to_arm struct_list main_md in
-  let data_in_arms = [PseudoInstr ".data"]@pseudoInstrList@[PseudoInstr ".text"; PseudoInstr ".global main"] in  
+  let data_in_arms = [PseudoInstr ".data"]@(!pseudoInstrList)@[PseudoInstr ".text"; PseudoInstr ".global main"] in  
   List.concat ([data_in_arms]@mds_in_arms@[main_in_arms])
