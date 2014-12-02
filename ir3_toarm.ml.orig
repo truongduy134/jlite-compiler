@@ -412,7 +412,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
       | StringLiteral3 s -> let labelname=next_label() in 
                             let _ = 
                             pseudoInstrList@[Label labelname; PseudoInstr (".asciz "^s)] in 
-                            [LDR ("","","a1",LabelAddr labelname);BL ("","printf(PLT)")] 
+                            [LDR ("","","a1",LabelAddr labelname)] 
       | _ -> failwith "unimplemented"
     end
   | AssignStmt3 (leftid, ir3_exp) -> 
@@ -528,11 +528,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
           let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
           let store_value_instr = [MOV ("", false, rleft, RegOp "a1")] in 
           store_argument_instrs@calling_instr@spill_instrs@store_value_instr
-      | ObjectCreate3 c ->
-        let (spilled1, rleft) = get_reg_single (Var3 leftid) None in 
-        let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
-        let size = (get_obj_size struct_list c)*4 in
-        spill_instrs@[MOV ("", false, "a1", ImmedOp ("#"^(string_of_int size))); BL ("", "_Znwj(PLT)"); MOV ("",false,rleft,RegOp "a1")]
+      | ObjectCreate3 c -> []
     end
   | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> []
   | AssignFieldStmt3 (ir3_exp1, ir3_exp2) -> (*todo: store the valud into the correct memory location *)
@@ -610,8 +606,14 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                 if (op = "+") then [ADD ("", false, rleft, rright1, operand2)]
                 else if (op = "-") then [SUB ("", false, rleft, rright1, operand2)] 
                 else if (op = "*") then [MUL ("", false, rleft, rright1, rright2)]  
+<<<<<<< HEAD
+                else failwith ("unrecognised AritmeticOp "^op) 
+              | _ -> failwith "invalid op"            
+          end in spill_instrs@assgn_instr
+=======
                 else failwith ("unrecognised AritmeticOp "^op)             
           end in (spill_instrs@assgn_instr, rleft)
+>>>>>>> f378f414fc4708801a4011afd73e845a50698b61
         | UnaryExp3 (ir3_op, idc3) -> 
           let idc3_name = 
           begin
