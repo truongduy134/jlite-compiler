@@ -215,8 +215,8 @@ let get_reg_three
   let (left_flg, left_reg) =
     if Hashtbl.mem hashtbl left_var
     then Hashtbl.find hashtbl left_var
-    else get_reg_single right_var_2 (Some [right_reg_1; right_reg_2])
-  in 
+    else get_reg_single left_var (Some [right_reg_1; right_reg_2])
+  in
   print_endline ("get_reg_three result: "^left_reg^" "^right_reg_1^" "^right_reg_2^" ");
   ((left_flg, left_reg), (right_flg_1, right_reg_1),
       (right_flg_2, right_reg_2))
