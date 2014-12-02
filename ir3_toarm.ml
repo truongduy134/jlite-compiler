@@ -293,12 +293,16 @@ let store_argument (arguments:(idc3 list)) =
 
 
 let find_field_offset (struct_list:cdata3 list) (md_decl:md_decl3) (classname:id3) (field_name:id3) = 
-  let cname = 
-  if classname = "this" then let (t, _) =  List.nth md_decl.params3 0 in 
-    match t with
-    | ObjectT objt -> objt
-    | _ -> failwith ("first argument of method is not of type object: "^(string_of_meth_decl3 md_decl))
-  else classname in 
+  let rec find_var_type lst var = 
+  match lst with
+  | [] -> failwith ("variable not found in param or local vars: "^(var))
+  | (t, id)::lst -> if id = var then 
+    begin
+      match t with
+      | ObjectT objt -> objt
+      | _ -> failwith ("var of method is not of type object: "^(id))
+    end else find_var_type lst var in 
+  let cname = find_var_type ( md_decl.params3@md_decl.localvars3) classname in 
   let _ = List.map (fun (x) -> print_endline (string_of_cdata3 x);()) struct_list in 
   let rec helper1 (struct_list:cdata3 list) (cname:id3) = 
   match struct_list with
@@ -314,7 +318,7 @@ in helper2 vars field_name 0
 let rec get_obj_size (struct_list:cdata3 list) (obj:class_name) = 
   let rec helper lst cname = 
     match lst with
-    | [] -> failwith "class name not found"
+    | [] -> failwith ("class name not found "^obj)
     | (c, vars)::lst -> 
       if (c = obj) then get_num_of_data struct_list vars 
       else helper lst cname in 
@@ -535,7 +539,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
         spill_instrs@[MOV ("", false, "a1", ImmedOp ("#"^(string_of_int size))); BL ("", "_Znwj(PLT)"); MOV ("",false,rleft,RegOp "a1")]
     end
   | AssignDeclStmt3 (ir3_type, id3, ir3_exp) -> []
-  | AssignFieldStmt3 (ir3_exp1, ir3_exp2) -> (*todo: store the valud into the correct memory location *)
+  | AssignFieldStmt3 (ir3_exp1, ir3_exp2) -> 
     let leftid = "_____temp" in
     begin
       match ir3_exp1 with
@@ -635,7 +639,17 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             | _ -> failwith "unrecognized op"
           end in (spill_instrs@assgn_instr, rleft)
         | FieldAccess3 (id3a, id3b) ->
-          failwith "not implemented"
+          let (spilled1, rleft) = get_reg_single (Var3 leftid) None in 
+          let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
+          let (hasReg, reg) = find_reg_contain_var (Var3 id3a) in 
+          let offset = find_field_offset struct_list md_decl id3a id3b in
+          let address = 
+            if hasReg 
+            then RegPreIndexed (reg, offset, false)
+            else 
+            let addresses = Hashtbl.find var_descriptor (Var3 id3a) in
+            select_var_address addresses 
+          in ([LDR ("", "", rleft, address)], rleft)
         | Idc3Expr idc3 -> 
           let idc3_name = 
           begin
@@ -654,7 +668,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
           let calling_instr = [BL ("", (id3^"(PLT)"))] in 
           let ((spilled1, rleft)) = get_reg_single (Var3 leftid) None in
           let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
-          let store_value_instr = [MOV ("", false, rleft, RegOp "a1")] in (*todo*)
+          let store_value_instr = [MOV ("", false, rleft, RegOp "a1")] in 
           (store_argument_instrs@calling_instr@spill_instrs@store_value_instr, rleft)
         | ObjectCreate3 c -> failwith "not implement"
         end in 
@@ -672,8 +686,6 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
             | _ -> failwith ("cannot find appropriate address for "^id1)
           end
         in [STR ("", "", r, address)]
-
-
       | _ -> failwith "invalid field assign stmt"
     end
   | MdCallStmt3 ir3_exp ->
