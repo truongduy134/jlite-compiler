@@ -292,6 +292,25 @@ let store_argument (arguments:(idc3 list)) =
   helper arguments 1
 
 
+let find_field_offset (struct_list:cdata3 list) (md_decl:md_decl3) (classname:id3) (field_name:id3) = 
+  let cname = 
+  if classname = "this" then let (t, _) =  List.nth md_decl.params3 0 in 
+    match t with
+    | ObjectT objt -> objt
+    | _ -> failwith ("first argument of method is not of type object: "^(string_of_meth_decl3 md_decl))
+  else classname in 
+  let _ = List.map (fun (x) -> print_endline (string_of_cdata3 x);()) struct_list in 
+  let rec helper1 (struct_list:cdata3 list) (cname:id3) = 
+  match struct_list with
+  | [] -> failwith ("classname not found in cdata: "^cname)
+  | (c, vars)::lst -> if c = cname then (c, vars) else helper1 lst cname in 
+  let (c, vars) = helper1 struct_list cname in 
+  let rec helper2 (vars:var_decl3 list) (field_name:id3) offsets = 
+  match vars with
+  | [] -> failwith ("field_name not found in class: "^field_name)
+  | (t, id)::vars -> if id = field_name then offsets else helper2 vars field_name (offsets+4)
+in helper2 vars field_name 0
+
 let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:label) (stmt:ir3_stmt)  = 
   (* print_endline ("translating stmt: " ^(string_of_ir3_stmt stmt)); *)
   let to_armlabel (label:label3) = let armlabel = "."^(string_of_int label) in (Label armlabel) in
@@ -390,7 +409,18 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
           | _ -> failwith "unrecognized op"
         end in spill_instrs@assgn_instr
       | FieldAccess3 (id3a, id3b) ->
-        []
+        print_endline ("FieldAccess3: "^(string_of_ir3_stmt stmt));
+        let (spilled1, rleft) = get_reg_single (Var3 leftid) None in 
+        let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
+        let (hasReg, reg) = find_reg_contain_var (Var3 id3a) in 
+        let offset = find_field_offset struct_list md_decl id3a id3b in
+        let address = 
+          if hasReg 
+          then RegPreIndexed (reg, offset, false)
+          else 
+          let addresses = Hashtbl.find var_descriptor (Var3 id3a) in
+          select_var_address addresses 
+        in [LDR ("", "", rleft, address)]
       | Idc3Expr idc3 -> 
         let idc3_name = 
         begin
