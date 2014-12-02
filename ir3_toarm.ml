@@ -373,7 +373,28 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
                                         else if (op = "||") then let armlabel = "."^(string_of_int label3) in 
                                         [ORR ("", false, rleft, rright1, RegOp rright2); CMP ("",rleft,ImmedOp "#0"); B ("eq",armlabel)]
                                         else failwith ("unrecognised booleanop "^op)
-                                      | RelationalOp op -> []
+                                      | RelationalOp op -> 
+                                        let cmp_instr = CMP ("", rright1, RegOp rright2) in 
+                                        let true_cond = 
+                                          if (op = "<") then "lt"
+                                          else if (op = ">") then "gt"
+                                          else if (op = "<=") then "le"
+                                          else if (op = ">=") then "ge"
+                                          else if (op = "==") then "eq"
+                                          else if (op = "!=") then "ne"
+                                          else failwith ("unrecognised RelationalOp "^op) in 
+                                        let false_cond = 
+                                          if (op = "<") then "ge"
+                                          else if (op = ">") then "le"
+                                          else if (op = "<=") then "gt"
+                                          else if (op = ">=") then "lt"
+                                          else if (op = "==") then "ne"
+                                          else if (op = "!=") then "eq"
+                                          else failwith ("unrecognised RelationalOp "^op) in 
+                                        let mov_instr1 = MOV (true_cond, false, rleft, ImmedOp "#1") in 
+                                        let mov_instr2 = MOV (false_cond, false, rleft, ImmedOp "#0") in
+                                        let armlabel = "."^(string_of_int label3) in 
+                                        [cmp_instr; mov_instr1; mov_instr2; CMP ("",rleft,ImmedOp "#0"); B ("eq",armlabel)]
                                       | _ -> failwith "unrecognized op"
                                     end in spill_instrs@assign_instrs
                                   end
