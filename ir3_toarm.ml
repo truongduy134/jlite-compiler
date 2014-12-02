@@ -319,8 +319,71 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
   | IfStmt3 (ir3_exp, label3) -> 
                                 begin 
                                 match ir3_exp with
-                                | BinaryExp3 (op, b1, b2) -> []
-                                | _ -> failwith ""
+                                | BinaryExp3 (op, idc3a, idc3b) -> 
+                                  begin
+                                    let leftid = "_____var1" in
+                                    let idc3a_name = 
+                                      begin
+                                        match idc3a with
+                                        | Var3 id3 -> idc3a
+                                        | _ -> (Var3 "_____temp1") 
+                                      end in 
+                                    let idc3b_name = 
+                                      begin
+                                        match idc3b with
+                                        | Var3 id3 -> idc3b
+                                        | _ -> (Var3 "_____temp2") 
+                                      end in
+                                    let ((spilled1, rleft), (spilled2, rright1), (spilled3, rright2)) = get_reg_three (Var3 leftid) idc3a_name idc3b_name in 
+                                    let spill_instrs = spill_reg [(spilled1, rleft, Var3 leftid); (spilled2, rright1, idc3a); (spilled3, rright2, idc3b)] in 
+                                    let assign_instrs = 
+                                    begin
+                                      match op with
+                                      | BooleanOp op -> 
+                                        if (op = "&&") then let armlabel = "."^(string_of_int label3) in 
+                                        [AND ("", false, rleft, rright1, RegOp rright2); CMP ("",rleft,ImmedOp "#0"); B ("eq",armlabel)]
+                                        else if (op = "||") then let armlabel = "."^(string_of_int label3) in 
+                                        [ORR ("", false, rleft, rright1, RegOp rright2); CMP ("",rleft,ImmedOp "#0"); B ("eq",armlabel)]
+                                        else failwith ("unrecognised booleanop "^op)
+                                      | RelationalOp op -> []
+                                      | _ -> failwith "unrecognized op"
+                                    end in spill_instrs@assign_instrs
+                                  end
+                                | UnaryExp3 (ir3_op, idc3) -> 
+                                  let leftid = "_____var1" in
+                                  let idc3_name = 
+                                  begin
+                                    match idc3 with
+                                    | Var3 id3 -> idc3
+                                    | _ -> (Var3 "_____temp1") 
+                                  end in 
+                                  let ((spilled1, rleft),(spilled2, rright)) = get_reg_two (Var3 leftid) idc3_name in
+                                  let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in
+                                  let assgn_instr = 
+                                  begin
+                                    match ir3_op with
+                                    | UnaryOp op -> 
+                                      if (op = "!") then let armlabel = "."^(string_of_int label3) in [EOR ("", false, rleft, rright, ImmedOp "#1"); CMP ("",rleft,ImmedOp "#0"); B ("eq",armlabel)]
+                                      else failwith "unrecognized op"
+                                    | _ -> failwith "unrecognized op"
+                                  end in spill_instrs@assgn_instr
+                                | Idc3Expr idc3 ->
+                                  begin
+                                    match idc3 with
+                                       | BoolLiteral3 b ->
+                                          let idc3_name = 
+                                          begin
+                                            match idc3 with
+                                            | Var3 id3 -> idc3
+                                            | _ -> (Var3 "_____temp1") 
+                                          end in 
+                                          let (spilled, rright) = get_reg_single idc3_name None in
+                                          let spill_instrs = spill_reg [(spilled, rright, idc3)] in
+                                          let armlabel = "."^(string_of_int label3) in
+                                          spill_instrs@[CMP ("",rright,ImmedOp "#0"); B ("eq",armlabel)]
+                                       | _ -> failwith "invalid op"   
+                                  end 
+                                | _ -> failwith "unrecognized exp"
                                 end
   | GoTo3 label3 -> let armlabel = "."^(string_of_int label3) in [(B ("", armlabel))]
   | ReadStmt3 id3  -> []
