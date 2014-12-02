@@ -239,6 +239,7 @@ let rec spill_reg lst =
     let str_instr = 
     if (need_to_spill == 2)
     then let var_to_spill = Hashtbl.find reg_descriptor r in
+      print_endline "need to spill";
       if Hashtbl.mem var_descriptor var_to_spill then 
       let addresses = Hashtbl.find var_descriptor var_to_spill in
       let address = select_var_address addresses in 
@@ -268,6 +269,23 @@ let rec spill_reg lst =
     else [] in 
     str_instr@ldr_instr@(spill_reg lst)
     (* (spill_reg lst) *)
+
+let save_a1_to_a4 () = 
+  let rec helper index = 
+  if index < 5 
+  then 
+  let str_instr = 
+    if Hashtbl.mem reg_descriptor ("a"^(string_of_int index)) then 
+      let id = Hashtbl.find reg_descriptor ("a"^(string_of_int index)) in 
+      if Hashtbl.mem var_descriptor id then 
+      let addresses = Hashtbl.find var_descriptor id in 
+      let address = select_var_address addresses in 
+      [STR ("", "", ("a"^(string_of_int index)), address)]
+      else []
+    else []
+  in str_instr@(helper (index+1))
+  else []
+  in helper 1
 
 let store_argument (arguments:(idc3 list)) = 
   let rec helper arguments index = 
@@ -442,7 +460,7 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
       | StringLiteral3 s -> let labelname=next_label() in 
                             let _ = 
                             pseudoInstrList := !pseudoInstrList@[Label labelname; PseudoInstr (".asciz \""^s^"\"")] in 
-                            [LDR ("","","a1",LabelAddr labelname);BL ("","printf(PLT)")] 
+                            [LDR ("","","a1",LabelAddr ("="^labelname));BL ("","printf(PLT)")] 
       | _ -> failwith "unimplemented"
     end
   | AssignStmt3 (leftid, ir3_exp) -> 
@@ -552,12 +570,13 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
         let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid)); (spilled2, rright, idc3)] in
         spill_instrs@[MOV ("", false, rleft, RegOp rright)]
       | MdCall3 (id3, idc3s) ->
+          let saving_argument_instrs = save_a1_to_a4 () in 
           let store_argument_instrs = store_argument idc3s in 
           let calling_instr = [BL ("", (id3^"(PLT)"))] in 
           let (spilled1, rleft) = get_reg_single (Var3 leftid) None in 
           let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
           let store_value_instr = [MOV ("", false, rleft, RegOp "a1")] in 
-          store_argument_instrs@calling_instr@spill_instrs@store_value_instr
+          saving_argument_instrs@store_argument_instrs@calling_instr@spill_instrs@store_value_instr
       | ObjectCreate3 c ->
         let (spilled1, rleft) = get_reg_single (Var3 leftid) None in 
         let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
@@ -690,12 +709,13 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
           (* spill_instrs@[MOV ("", false, rright, RegOp rright)] *)
           (spill_instrs@[MOV ("", false, rleft, RegOp rright)], rleft)
         | MdCall3 (id3, idc3s) ->
+          let saving_argument_instrs = save_a1_to_a4 () in 
           let store_argument_instrs = store_argument idc3s in 
           let calling_instr = [BL ("", (id3^"(PLT)"))] in 
           let ((spilled1, rleft)) = get_reg_single (Var3 leftid) None in
           let spill_instrs = spill_reg [(spilled1, rleft, (Var3 leftid))] in
           let store_value_instr = [MOV ("", false, rleft, RegOp "a1")] in 
-          (store_argument_instrs@calling_instr@spill_instrs@store_value_instr, rleft)
+          (saving_argument_instrs@store_argument_instrs@calling_instr@spill_instrs@store_value_instr, rleft)
         | ObjectCreate3 c -> failwith "not implement"
         end in 
         let (hasReg, reg) = find_reg_contain_var (Var3 id1) in 
@@ -718,9 +738,10 @@ let ir3_stmt_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) (exit_label:lab
     begin
       match ir3_exp with
       | MdCall3 (id3, idc3s) -> 
+        let saving_argument_instrs = save_a1_to_a4 () in 
         let store_argument_instrs = store_argument idc3s in 
         let calling_instr = [BL ("", (id3^"(PLT)"))] in 
-        store_argument_instrs@calling_instr
+        saving_argument_instrs@store_argument_instrs@calling_instr
       | _ -> failwith ("invalid MdCallStmt3: "^(string_of_ir3_stmt stmt))
     end
   | ReturnStmt3 id3 -> 
@@ -782,6 +803,7 @@ let ir3_md_to_arm (struct_list:cdata3 list) (md_decl:md_decl3) =
   let exit_instr_label = Label exitLabel in 
   let reset_sp_instr = SUB ("", false, "sp", "fp", ImmedOp "#24") in 
   let ldmfd_instr = LDMFD (["fp"; "pc"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
+  let _ = remove_reg_bindings_for_vars (List.map (fun(t, id)->Var3 id) (md_decl.params3@md_decl.localvars3)) in 
   (md_start_label::stmfd_instr::set_fp_instr::set_sp_instr::body_arm)@([exit_instr_label; reset_sp_instr; ldmfd_instr])
 
 
